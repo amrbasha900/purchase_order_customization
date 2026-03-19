@@ -390,9 +390,14 @@ def create_purchase_return(args):
             orig_pi_item = ret_item.purchase_invoice_item
             if orig_pi_item in pi_item_qty_map:
                 ret_item.qty = -1 * flt(pi_item_qty_map[orig_pi_item])
+                ret_item.received_qty = ret_item.qty
                 ret_item.amount = flt(ret_item.qty * ret_item.rate)
                 if hasattr(ret_item, 'stock_qty'):
                     ret_item.stock_qty = flt(ret_item.qty * (ret_item.conversion_factor or 1))
+                if hasattr(ret_item, 'received_stock_qty'):
+                    ret_item.received_stock_qty = ret_item.stock_qty
+                if hasattr(ret_item, 'rejected_qty'):
+                    ret_item.rejected_qty = 0
                 items_to_keep.append(ret_item)
 
         return_doc.items = items_to_keep
@@ -499,6 +504,63 @@ def get_last_purchase_rate(supplier, item_code, uom=None):
     rate = frappe.db.sql(query, params)
     
     return flt(rate[0][0]) if rate else 0.0
+
+
+# ──────────────────────────────────────────────────────────
+#  GET FULL ITEM DETAILS FOR QUICK-ADD (single round trip)
+# ──────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_item_details_for_purchase_order(item_code, company, supplier=None,
+                                         currency=None, price_list=None,
+                                         qty=1, uom=None, warehouse=None,
+                                         conversion_rate=1, transaction_date=None,
+                                         ignore_pricing_rule=0):
+    """Return all item details needed to populate a Purchase Order Item row.
+
+    Calls ERPNext's standard get_item_details internally, then appends
+    custom_last_rate. Single backend round trip replaces multiple client-side calls.
+    """
+    from erpnext.stock.get_item_details import get_item_details as _get_item_details
+
+    if not item_code or not company:
+        frappe.throw(_("Item Code and Company are required."))
+
+    args = frappe._dict({
+        "item_code": item_code,
+        "company": company,
+        "doctype": "Purchase Order",
+        "child_doctype": "Purchase Order Item",
+        "supplier": supplier or "",
+        "currency": currency or frappe.get_cached_value("Company", company, "default_currency"),
+        "buying_price_list": price_list or "",
+        "conversion_rate": flt(conversion_rate) or 1,
+        "price_list_currency": currency or frappe.get_cached_value("Company", company, "default_currency"),
+        "plc_conversion_rate": 1,
+        "qty": flt(qty) or 1,
+        "uom": uom or "",
+        "stock_uom": "",
+        "transaction_date": transaction_date or nowdate(),
+        "warehouse": warehouse or "",
+        "set_warehouse": warehouse or "",
+        "is_pos": 0,
+        "is_subcontracted": 0,
+        "ignore_pricing_rule": cint(ignore_pricing_rule),
+        "transaction_type": "buying",
+    })
+
+    out = _get_item_details(args)
+
+    # Append custom_last_rate
+    last_rate = 0.0
+    if supplier:
+        result_uom = out.get("uom") or uom or ""
+        lr = get_last_purchase_rate(supplier, item_code, result_uom)
+        last_rate = flt(lr)
+
+    out["custom_last_rate"] = last_rate
+
+    return out
 
 
 # ──────────────────────────────────────────────────────────

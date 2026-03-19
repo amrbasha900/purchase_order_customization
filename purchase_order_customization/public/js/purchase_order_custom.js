@@ -994,15 +994,15 @@ function add_quick_item_search_po(frm) {
 
                         <div id="quick_add_controls_po" style="margin-top: 10px; display: none;">
                             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; width:100%;">
-                                <div style="flex: 0 0 calc(40% - 8px); min-width: 260px;">
+                                <div style="flex: 0 0 calc(30% - 8px); min-width: 220px;">
                                     <div class="text-muted small" style="margin-bottom:4px;">Selected</div>
                                     <input id="quick_add_selected_po" class="form-control input-sm" readonly style="height:34px; font-weight:600; background:#fff;">
                                 </div>
-                                <div style="flex: 0 0 calc(15% - 8px); min-width: 120px;">
+                                <div style="flex: 0 0 calc(10% - 8px); min-width: 80px;">
                                     <label class="text-muted small" style="margin-bottom:4px; display:block;">Qty</label>
                                     <input id="quick_add_qty_po" type="number" class="form-control input-sm" value="1" min="0" step="1" style="height:34px;">
                                 </div>
-                                <div style="flex: 0 0 calc(15% - 8px); min-width: 140px;">
+                                <div style="flex: 0 0 calc(12% - 8px); min-width: 110px;">
                                     <label class="text-muted small" style="margin-bottom:4px; display:block;">UOM</label>
                                     <div style="position:relative;">
                                         <input id="quick_add_uom_po" class="form-control input-sm" placeholder="UOM" style="height:34px;">
@@ -1022,11 +1022,15 @@ function add_quick_item_search_po(frm) {
                                         "></div>
                                     </div>
                                 </div>
-                                <div style="flex: 0 0 calc(15% - 8px); min-width: 140px;">
+                                <div style="flex: 0 0 calc(12% - 8px); min-width: 110px;">
                                     <label class="text-muted small" style="margin-bottom:4px; display:block;">Rate</label>
                                     <input id="quick_add_rate_po" type="number" class="form-control input-sm" placeholder="auto" step="0.01" style="height:34px;">
                                 </div>
-                                <div style="flex: 0 0 calc(15% - 8px); min-width: 160px; display:flex; gap:8px; align-items:flex-end; justify-content:flex-end;">
+                                <div style="flex: 0 0 calc(12% - 8px); min-width: 110px;">
+                                    <label class="text-muted small" style="margin-bottom:4px; display:block;">Last Price</label>
+                                    <input id="quick_add_last_price_po" class="form-control input-sm" readonly style="height:34px; background:#fff3cd; color:#856404; font-weight:600;" value="-">
+                                </div>
+                                <div style="flex: 0 0 calc(12% - 8px); min-width: 130px; display:flex; gap:8px; align-items:flex-end; justify-content:flex-end;">
                                     <button id="quick_add_btn_po" class="btn btn-primary btn-sm" type="button" style="height:34px;">Add</button>
                                     <button id="quick_add_details_btn_po" class="btn btn-default btn-sm" type="button" style="height:34px; display:none;">Details</button>
                                 </div>
@@ -1527,6 +1531,7 @@ function setup_autocomplete_po(frm) {
     const uom_input = document.getElementById('quick_add_uom_po');
     const uom_results = document.getElementById('quick_add_uom_results_po');
     const rate_input = document.getElementById('quick_add_rate_po');
+    const last_price_input = document.getElementById('quick_add_last_price_po');
     const add_btn = document.getElementById('quick_add_btn_po');
     const details_btn = document.getElementById('quick_add_details_btn_po');
     const help_btn = document.getElementById('quick_add_help_btn_po');
@@ -1552,11 +1557,32 @@ function setup_autocomplete_po(frm) {
         if (uom_input) uom_input.value = '';
         if (uom_input) { uom_input.readOnly = false; uom_input.disabled = false; }
         if (rate_input) rate_input.value = '';
+        if (last_price_input) last_price_input.value = '-';
         if (uom_results) { uom_results.innerHTML = ''; uom_results.style.display = 'none'; }
         if (details_btn) details_btn.style.display = 'none';
         uom_options = [];
         uom_selected_index = -1;
         show_controls(false);
+    }
+
+    function fetch_and_display_last_price_po(item_code, uom) {
+        if (!last_price_input) return;
+        if (!frm.doc.supplier || !item_code) {
+            last_price_input.value = '-';
+            return;
+        }
+        frappe.call({
+            method: 'purchase_order_customization.api.purchase_order_actions.get_last_purchase_rate',
+            args: { supplier: frm.doc.supplier, item_code: item_code, uom: uom || '' },
+            async: true,
+            callback: function(r) {
+                if (r.message && flt(r.message) > 0) {
+                    last_price_input.value = format_number(flt(r.message), null, 2);
+                } else {
+                    last_price_input.value = '-';
+                }
+            }
+        });
     }
 
     function hide_uom_dropdown() {
@@ -1595,6 +1621,7 @@ function setup_autocomplete_po(frm) {
                 const idx = parseInt(this.dataset.index);
                 uom_input.value = list[idx];
                 hide_uom_dropdown();
+                if (pending_item) fetch_and_display_last_price_po(pending_item.item_code, list[idx]);
                 setTimeout(() => rate_input && rate_input.focus(), 10);
             });
         });
@@ -1621,8 +1648,8 @@ function setup_autocomplete_po(frm) {
         // Reset controls for the newly selected item (so rate/uom always refresh)
         if (qty_input) qty_input.value = '1';
         if (uom_input && !uom_input.readOnly) uom_input.value = '';
-        // Don't prefetch price in quick add (faster). Rate will be set when adding to the table.
         if (rate_input) rate_input.value = '';
+        if (last_price_input) last_price_input.value = '-';
         if (selected_input) selected_input.value = `${item.item_code} - ${item.item_name || ''}`.trim();
         show_controls(true);
         if (results_div) results_div.style.display = 'none';
@@ -1630,6 +1657,9 @@ function setup_autocomplete_po(frm) {
 
         await populate_uoms_for_item(item.item_code);
         if (uom_input && !uom_input.value && item.stock_uom) uom_input.value = item.stock_uom;
+
+        // Fetch last price for this item + UOM
+        fetch_and_display_last_price_po(item.item_code, uom_input?.value || item.stock_uom);
 
         setTimeout(() => qty_input && qty_input.focus(), 20);
         setTimeout(() => qty_input && qty_input.select && qty_input.select(), 30);
@@ -1646,7 +1676,10 @@ function setup_autocomplete_po(frm) {
         const uom = String(uom_input?.value || '').trim();
         const rate_str = String(rate_input?.value || '').trim();
         const rate = rate_str ? parseFloat(rate_str) : null;
-        add_item_to_table_po(frm, pending_item, { qty, uom: uom || null, rate });
+        // Read last price from the search bar (read-only field)
+        const lp_str = String(last_price_input?.value || '').trim();
+        const last_price = (lp_str && lp_str !== '-') ? parseFloat(lp_str.replace(/,/g, '')) : null;
+        add_item_to_table_po(frm, pending_item, { qty, uom: uom || null, rate, last_price: last_price });
         clear_controls();
         input.value = '';
         results_div.style.display = 'none';
@@ -1710,8 +1743,9 @@ function setup_autocomplete_po(frm) {
                 const els = uom_results.querySelectorAll('.uom-result-item');
                 const el = els[uom_selected_index];
                 if (el) {
-                    uom_input.value = el.textContent || '';
+                    uom_input.value = el.textContent.trim() || '';
                     hide_uom_dropdown();
+                    if (pending_item) fetch_and_display_last_price_po(pending_item.item_code, uom_input.value);
                     setTimeout(() => rate_input && rate_input.focus(), 10);
                 }
             } else if (e.key === 'Escape') {
@@ -1837,75 +1871,131 @@ function add_item_to_table_po(frm, item, opts) {
         frappe.msgprint(__('Cannot add items to submitted Purchase Order'));
         return;
     }
+
+    // Show lightweight loading
     const input = document.getElementById('quick_item_search_po');
     const loading_icon = document.getElementById('search_loading_po');
     if (input && input._dr_set_add_in_progress) input._dr_set_add_in_progress(true);
     if (loading_icon) loading_icon.style.display = 'block';
 
-    // Standard ERPNext behavior: create a row, set item_code/qty/uom, then trigger item_code
-    // so ERPNext transaction controller fills rate/price_list_rate/taxes/etc.
-    (async function() {
-        try {
-            let existing_row = null;
-            (frm.doc.items || []).forEach(row => {
-                if (row.item_code === item.item_code) existing_row = row;
-            });
+    const target_uom = opts.uom || item.stock_uom || '';
+    const has_custom_rate = opts.rate !== undefined && opts.rate !== null && opts.rate !== '' && !Number.isNaN(opts.rate);
 
-            if (existing_row) {
-                await frappe.model.set_value(existing_row.doctype, existing_row.name, 'qty', existing_row.qty + (opts.qty || 1));
-                
-                // Trigger standard ERPNext pricing update
-                await frm.script_manager.trigger('item_code', existing_row.doctype, existing_row.name);
+    // Check if item already exists with the SAME UOM → just increment qty
+    let existing_row = null;
+    (frm.doc.items || []).forEach(row => {
+        if (row.item_code === item.item_code && (!target_uom || row.uom === target_uom)) {
+            existing_row = row;
+        }
+    });
 
-                // Override UOM if specified in search
-                if (opts.uom) {
-                    await frappe.model.set_value(existing_row.doctype, existing_row.name, 'uom', opts.uom);
-                    // If no custom rate specified, force a rate refresh for the new UOM
-                    if (opts.rate === undefined || opts.rate === null || opts.rate === '' || Number.isNaN(opts.rate)) {
-                        await frm.script_manager.trigger('uom', existing_row.doctype, existing_row.name);
-                    }
+    if (existing_row) {
+        // Existing row: bump qty and set rate priority: custom rate > last price > keep existing
+        const new_qty = existing_row.qty + (opts.qty || 1);
+        const has_last_price = opts.last_price !== undefined && opts.last_price !== null && !Number.isNaN(opts.last_price) && opts.last_price > 0;
+        let effective_rate = existing_row.rate; // default: keep existing rate
+        if (has_custom_rate) {
+            effective_rate = opts.rate;
+        } else if (has_last_price) {
+            effective_rate = opts.last_price;
+        }
+        frappe.model.set_value(existing_row.doctype, existing_row.name, 'qty', new_qty);
+        frappe.model.set_value(existing_row.doctype, existing_row.name, 'rate', effective_rate);
+        frappe.model.set_value(existing_row.doctype, existing_row.name, 'amount',
+            new_qty * flt(effective_rate));
+        frm.refresh_field('items');
+        schedule_recalculate_po(frm);
+        if (loading_icon) loading_icon.style.display = 'none';
+        if (input && input._dr_set_add_in_progress) input._dr_set_add_in_progress(false);
+        return;
+    }
+
+    // New row: single backend call to get all item details
+    frappe.call({
+        method: 'purchase_order_customization.api.purchase_order_actions.get_item_details_for_purchase_order',
+        args: {
+            item_code: item.item_code,
+            company: frm.doc.company,
+            supplier: frm.doc.supplier || '',
+            currency: frm.doc.currency || '',
+            price_list: frm.doc.buying_price_list || '',
+            qty: opts.qty || 1,
+            uom: target_uom,
+            warehouse: frm.doc.set_warehouse || '',
+            conversion_rate: frm.doc.conversion_rate || 1,
+            transaction_date: frm.doc.transaction_date || frm.doc.schedule_date || '',
+            ignore_pricing_rule: frm.doc.ignore_pricing_rule || 0,
+        },
+        async: true,
+        callback: function (r) {
+            try {
+                if (!r || !r.message) {
+                    frappe.show_alert({ message: __('Could not fetch item details'), indicator: 'red' }, 3);
+                    return;
                 }
 
-                if (opts.rate !== undefined && opts.rate !== null && opts.rate !== '' && !Number.isNaN(opts.rate)) {
-                    // Small delay to ensure any async price fetching is finished
-                    await new Promise(r => setTimeout(r, 200));
-                    await frappe.model.set_value(existing_row.doctype, existing_row.name, 'rate', opts.rate);
-                }
-            } else {
+                const details = r.message;
                 const child_doctype = (frm.fields_dict.items && frm.fields_dict.items.grid && frm.fields_dict.items.grid.doctype)
                     ? frm.fields_dict.items.grid.doctype
                     : 'Purchase Order Item';
                 const row = frappe.model.add_child(frm.doc, child_doctype, 'items', 1);
-                
-                // Use set_value for item_code to properly trigger all async side effects
-                await frappe.model.set_value(row.doctype, row.name, 'item_code', item.item_code);
-                await frappe.model.set_value(row.doctype, row.name, 'qty', opts.qty || 1);
 
-                // Override UOM if specified in search
-                if (opts.uom) {
-                    await frappe.model.set_value(row.doctype, row.name, 'uom', opts.uom);
-                    // If no custom rate specified, force a rate refresh for the new UOM
-                    if (opts.rate === undefined || opts.rate === null || opts.rate === '' || Number.isNaN(opts.rate)) {
-                        await frm.script_manager.trigger('uom', row.doctype, row.name);
+                // Populate all fields directly from backend response
+                const fields_to_set = [
+                    'item_code', 'item_name', 'description', 'image',
+                    'uom', 'stock_uom', 'conversion_factor',
+                    'warehouse', 'expense_account', 'cost_center',
+                    'price_list_rate', 'base_price_list_rate',
+                    'discount_percentage', 'discount_amount',
+                    'rate', 'base_rate', 'net_rate',
+                    'item_tax_template', 'item_tax_rate',
+                    'item_group', 'brand',
+                    'has_serial_no', 'has_batch_no',
+                    'weight_per_unit', 'weight_uom', 'total_weight',
+                    'last_purchase_rate',
+                ];
+
+                fields_to_set.forEach(field => {
+                    if (details[field] !== undefined && details[field] !== null) {
+                        row[field] = details[field];
                     }
-                }
+                });
 
-                if (opts.rate !== undefined && opts.rate !== null && opts.rate !== '' && !Number.isNaN(opts.rate)) {
-                    // Small delay to ensure any async price fetching is finished
-                    await new Promise(r => setTimeout(r, 200));
-                    await frappe.model.set_value(row.doctype, row.name, 'rate', opts.rate);
+                // Set qty and compute amounts
+                row.qty = flt(opts.qty || 1);
+                row.stock_qty = flt(row.qty) * flt(row.conversion_factor || 1);
+
+                // Rate priority: custom rate from search bar > backend rate
+                if (has_custom_rate) {
+                    row.rate = flt(opts.rate);
+                } else {
+                    row.rate = flt(details.rate || details.price_list_rate || 0);
                 }
-                
+                row.price_list_rate = flt(details.price_list_rate || row.rate);
+                row.amount = flt(row.qty * row.rate);
+                row.base_rate = flt(row.rate * (frm.doc.conversion_rate || 1));
+                row.base_amount = flt(row.amount * (frm.doc.conversion_rate || 1));
+                row.net_rate = row.rate;
+                row.net_amount = row.amount;
+
+                // Set custom_last_rate from backend
+                row.custom_last_rate = flt(details.custom_last_rate || 0);
+
+                // Set schedule_date from parent
+                row.schedule_date = frm.doc.schedule_date || '';
+
                 frm.refresh_field('items');
-            }
+                schedule_recalculate_po(frm);
 
-            frm.refresh_field('items');
-            schedule_recalculate_po(frm);
-        } finally {
+            } finally {
+                if (loading_icon) loading_icon.style.display = 'none';
+                if (input && input._dr_set_add_in_progress) input._dr_set_add_in_progress(false);
+            }
+        },
+        error: function () {
             if (loading_icon) loading_icon.style.display = 'none';
             if (input && input._dr_set_add_in_progress) input._dr_set_add_in_progress(false);
+            frappe.show_alert({ message: __('Error fetching item details'), indicator: 'red' }, 3);
         }
-    })();
+    });
 }
-
-
