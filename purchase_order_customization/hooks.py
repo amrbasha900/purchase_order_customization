@@ -42,11 +42,24 @@ app_license = "mit"
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
 
-# include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
-# doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
-# doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
+# doctype js
+doctype_js = {
+    "Purchase Order": "public/js/purchase_order_custom.js"
+}
+
+# Export Custom Fields
+fixtures = [
+    {"dt": "Custom Field", "filters": [
+        [
+            "name", "in", [
+                "Purchase Order Item-custom_last_rate", "Purchase Order Item-custom_action", "Company-custom_update_stock_purchase",
+                 "Company-custom_purchase_order_print_format_button", "Purchase Order-custom_supplier_balance",
+                 "Company-custom_print_purchase_order_matrix", "Company-custom_purchase_order_return_print_format_button",
+                 "Company-custom_print_purchase_order_return_matrix"
+            ]
+        ]
+    ]}
+]
 
 # Svg Icons
 # ------------------
