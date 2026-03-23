@@ -678,15 +678,27 @@ def get_purchase_return_print_url(invoice_name, purchase_order):
 #  GET SUPPLIER OUTSTANDING
 # ──────────────────────────────────────────────────────────
 
-@frappe.whitelist()
-def get_supplier_outstanding_amount(supplier, company):
-    """Get the calculated outstanding amount for a supplier in a specific company."""
-    from erpnext.accounts.party import get_dashboard_info
-    company_wise_info = get_dashboard_info("Supplier", supplier)
-    for info in company_wise_info:
-        if info.get("company") == company:
-            return info.get("total_unpaid", 0)
-    return 0
+@frappe.whitelist()  
+def get_supplier_outstanding_amount(supplier, company, cost_center=None):  
+    """Get supplier outstanding amount based on GL entries only."""  
+    # Build condition for cost center filter  
+    cond = ""  
+    if cost_center:  
+        lft, rgt = frappe.get_cached_value("Cost Center", cost_center, ["lft", "rgt"])  
+        cond = f""" and cost_center in (select name from `tabCost Center` where  
+            lft >= {lft} and rgt <= {rgt})"""  
+      
+    # For suppliers, outstanding is credit - debit (what we owe)  
+    outstanding_based_on_gle = frappe.db.sql(  
+        f"""  
+        select sum(credit) - sum(debit)  
+        from `tabGL Entry` where party_type = 'Supplier'  
+        and is_cancelled = 0 and party = %s  
+        and company=%s {cond}""",  
+        (supplier, company),  
+    )  
+      
+    return flt(outstanding_based_on_gle[0][0]) if outstanding_based_on_gle else 0
 
 
 # ──────────────────────────────────────────────────────────
